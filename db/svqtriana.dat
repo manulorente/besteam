@@ -1,0 +1,11 @@
+a,22.0,6,b,c,d,e,f,g,h,i,j,nolitro
+b,23.5,7
+c,21.0,6,a,b,d,e
+d,23.5,7
+e,19.0,7
+f,18.0,5,a,b,c,d,e,g,h,i,j
+g,17.0,5,a,b,c,d,e,f,h,i,j
+h,18.0,6
+i,15.0,5,a,b,c,d,e,f,g,h,j
+j,13.5,5,a,b,c,d,e,f,g,h,i
+nolitro,5.0,1,a,b,c,d,e,f,g,h,i,j
