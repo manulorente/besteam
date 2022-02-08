@@ -1,0 +1,212 @@
+html, body {
+  font-family: "Dosis", sans-serif;
+  font-weight: normal;
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  scroll-behavior: smooth;
+}
+
+a{
+  text-decoration: none;
+}
+
+.header_section {
+  background-color: #009698;
+  color: #FFFFFF; 
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header_section h3{
+  color: #FFFFFF;  
+  margin: 0 auto;
+  font-weight: bold;  
+  font-size: 40px;
+}
+
+.icon_header {
+  color: #FFFFFF; 
+  font-size: 2em;
+}
+
+.footer_section {
+  color: #FFFFFF;
+  background-color: #009698;
+  text-align: center;
+  position:fixed;
+  bottom:0px;
+  left:0px;
+  width:100%;
+  padding: 5px;
+  font-size: 0.9em;
+}
+
+.menu_section {
+  color: #222222;
+  background-color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: space-evenly;
+  height: 100%;
+  width: 100%;
+  text-align: center;
+  font-size: 25px;    
+}
+
+.menu_section .row {
+  font-size: 25px;
+  float: center;
+}
+
+.how_section {
+  color: #222222;
+  background-color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: start;
+  height: 85%;
+  width: 100%;
+  text-align: center;
+  font-size: 20px;  
+}
+
+.how_section .row {
+  font-size: 20px;
+  float: center;
+  margin: 20px auto;
+}
+
+.create_section {
+  text-align: center;
+  width: 100%;
+  margin: 0 auto; /* Center the DIV horizontally */
+  align-items: start;
+  justify-content: center;
+}
+
+.create_section .row {
+  font-size: 25px;
+  float: center;
+  padding-top: 20px;
+  padding-bottom: 20px;
+}
+
+.access_section {
+  text-align: center;
+  width: 100%;
+  margin: 0 auto; /* Center the DIV horizontally */
+  align-items: start;
+  justify-content: center;
+}
+
+.access_section .row {
+  font-size: 25px;
+  float: center;
+  padding-top: 20px;
+  padding-bottom: 20px;
+}
+
+.team_section {
+  text-align: center;
+  width: 100%;
+  margin: 0 auto; /* Center the DIV horizontally */
+  align-items: start;
+  justify-content: center;
+}
+
+.team_section .row {
+  font-size: 25px;
+  float: center;
+  padding-top: 20px;
+  padding-bottom: 20px;
+}
+
+.team_section table {
+  text-align: center;
+  margin: auto;
+  border: 1px dashed black;
+  padding: 1rem;
+  width: 50%;
+}
+
+.vote_section {
+  text-align: center;
+  width: 100%;
+  margin: 0 auto; /* Center the DIV horizontally */
+  align-items: start;
+  justify-content: center;
+}
+
+.vote_section .row {
+  font-size: 25px;
+  float: center;
+  padding-top: 20px;
+  padding-bottom: 20px;
+}
+
+.vote_section table {
+  text-align: center;
+  margin: auto;
+  border: none;
+  width: 50%;
+}
+
+.form_error {
+  margin-top: 20px;
+  padding-left: 5%;
+  padding-right: 5%;
+  color:#c93737;
+  font-size: 20px;
+}
+
+.form_ok {
+  margin-top: 20px;
+  padding-left: 5%;
+  padding-right: 5%;
+  color:#42b53e;
+  font-size: 20px;
+}
+
+.match_section {
+  text-align: center;
+  width: 100%;
+  margin: 0 auto; /* Center the DIV horizontally */
+  align-items: start;
+  justify-content: center;
+}
+
+.match_section .row {
+  font-size: 25px;
+  float: center;
+  padding-top: 20px;
+  padding-bottom: 10px;
+}
+
+.match_section table {
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 30px;
+  margin-bottom: 30px;
+}
+
+.error_section {
+  color: #222222;
+  background-color: #FFFFFF;
+  padding: 0;
+  margin: 0 auto;
+  height: 100%;
+  width: 100%;
+  text-align: center;
+  font-size: 25px;   
+  float: center; 
+}
+
+.error_section .row {
+  font-size: 25px;
+  float: center;
+}
