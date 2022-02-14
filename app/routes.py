@@ -1,17 +1,130 @@
 
+from distutils.log import error
 import os
 import random
+import datetime
+import logging
 import numpy as np
+import sqlite3 as sql
 from pathlib import Path
 from flask import Flask, render_template, request, redirect, url_for
 
+# APP SECTION
 app = Flask(__name__)
-
-# DISABLE DEBUG FOR PRODUCTION!
 app.debug = False
 
-def write_db(db_name = "", besteam = ""):
-    save_path = os.path.join("db", str(db_name).upper() + ".dat")
+# DATABASE SECTION
+DB_FILE = 'db\\besteam_database.db'
+
+# LOGGER SECTION
+logging.basicConfig(
+    filename = 'log\\debug.log',
+    filemode = "a",
+    level = logging.INFO,
+    format = "[%(asctime)s] %(levelname)-8s %(funcName)-20s %(message)s",
+    datefmt = "%m/%d/%Y %H:%M:%S",
+)
+
+def create_connection(db_file = DB_FILE):
+    conn = None
+    try:
+        conn = sql.connect(db_file)
+        sql_create_teams_table = """CREATE TABLE IF NOT EXISTS teams (
+                                            id INTEGER PRIMARY KEY,
+                                            name TEXT NOT NULL,
+                                            created_by TEXT NOT NULL,
+                                            modified_by TEXT NOT NULL
+                                            );"""
+        sql_create_players_table = """CREATE TABLE IF NOT EXISTS players (
+                                            id INTEGER PRIMARY KEY,
+                                            team_id INTEGER NOT NULL,
+                                            name TEXT NOT NULL,
+                                            rating FLOAT NOT NULL,
+                                            votes INTEGER NOT NULL,
+                                            voted TEXT,
+                                            FOREIGN KEY(team_id) REFERENCES teams(id)
+                                            );"""                                            
+        create_table(conn, sql_create_teams_table)   
+        create_table(conn, sql_create_players_table)                                                                                             
+    except sql.Error as e:
+        logging.error(e)
+    finally:
+        if conn:
+            conn.close()
+
+def create_table(conn, create_table_sql):
+    try:
+        c = conn.cursor()
+        c.execute(create_table_sql)
+    except sql.Error as e:
+        print(e)    
+
+def create_team(conn, team):
+    now = datetime.datetime.utcnow()
+    now.strftime('%m/%d/%Y %H:%M:%S')
+    cur = conn.cursor()
+    cur.execute("INSERT INTO teams(name, created_by, modified_by) VALUES(?, ?, ?);", 
+                (team, now, now))
+    conn.commit()
+    return cur.lastrowid
+
+def read_db(team_name = ""):
+    conn = None
+    team = []
+    try:
+        conn = sql.connect(DB_FILE)
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM teams WHERE name = ?;", (team_name, ))  
+        team_id = cur.fetchone()[0]
+        if team_id != None:
+            cur.execute("SELECT * FROM players WHERE team_id = ?;", (team_id, )) 
+            team = cur.fetchall()
+    except sql.Error as e:
+        logging.error(e)
+    finally:
+        if conn: conn.close() 
+    return team
+
+def add_player(team_name = "", player = ""):
+    error = 0
+    if player != "" or player.isalnum() == False: 
+        conn = None
+        try:
+            conn = sql.connect(DB_FILE)
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM teams WHERE name = ?;", (team_name, )) 
+            team_id = cur.fetchone()[0]
+            if team_id != None:
+                cur.execute("SELECT * FROM players WHERE team_id = ?;", (team_id, ))
+                rows = cur.fetchall() 
+                # Check if player already exist on database
+                if any(player in row for row in rows):
+                    error = 1
+                else:
+                    now = datetime.datetime.utcnow()
+                    now.strftime('%m/%d/%Y %H:%M:%S')                    
+                    cur.execute("INSERT INTO players(team_id, name, rating, votes) VALUES(?,?,?,?);", 
+                                (team_id, player, 0.0, 0))
+                    cur.execute("UPDATE teams SET modified_by = ? WHERE id = ?;", (now, team_id))
+                    conn.commit()
+        except sql.Error as e:
+            logging.error(e)
+        finally:        
+            if conn:
+                conn.close() 
+    else:
+        error = 2
+    return error
+
+def db2dict(players = {}):
+    team = {}
+    for player in players:
+        _, _, name, rating, votes, *voted = player
+        team[name] = {'rating': float(rating), 'votes': int(votes), 'voted': list(voted)}
+    return team
+
+def write_db(team_name = "", besteam = ""):
+    save_path = os.path.join("db", str(team_name).upper() + ".dat")
     f1 = open(save_path, "w")
     for player in besteam:
         f1.write(player+","+str(besteam[player]['rating'])) 
@@ -23,20 +136,6 @@ def write_db(db_name = "", besteam = ""):
             f1.write('\n')
     f1.close()    
     return True
-
-def read_db(db_name = ""):
-    save_path = os.path.join("db", str(db_name).upper() + ".dat")
-    f1 = open(save_path, "r")
-    team = f1.readlines()
-    f1.close()
-    return team
-
-def db2dict(team = ""):
-    besteam = {}
-    for player in team:
-        name, rating, votes, *voted = player.strip('\n').split(',')
-        besteam[name] = {'rating': float(rating), 'votes': int(votes), 'voted': list(voted)}
-    return besteam
 
 @app.route('/')
 @app.route('/index')
@@ -59,92 +158,130 @@ def create():
     if request.method == 'GET':
         return render_template('create.html', ERROR = 0)
     else:
-        db_name = str(request.form['team']).upper()
-        # Create database
-        root_path = Path("db")
-        if not (os.path.exists(root_path)): root_path.mkdir(parents=True, exist_ok=True)
-        # Create new group key
-        save_path = os.path.join("db", str(db_name) + ".dat")
-        if os.path.isfile(save_path):
-            return render_template('create.html', ERROR = 1)
-        elif db_name.isalnum() == False or len(db_name) < 5: 
-            return render_template('create.html', ERROR = 2)
+        # Create team in the database if doesn't exist
+        team_name = str(request.form['team']).upper()
+        conn = None
+        try:
+            if team_name.isalnum() == False or len(team_name) < 5:
+                return render_template('create.html', ERROR = 2)
+            else:
+                conn = sql.connect(DB_FILE)
+                cur = conn.cursor()
+                cur.execute("SELECT * FROM teams WHERE name = ?", (team_name, ))  
+        except sql.Error as e:
+            logging.error(e)
+        finally:
+            if conn:
+                if cur.fetchone() != None:
+                    conn.close() 
+                    return render_template('create.html', ERROR = 1)
+                else:
+                    create_team(conn, team_name)   
+                    conn.close() 
+                    return redirect(url_for('access', team_name= team_name))
+
+
+@app.route('/team/<team_name>', methods=['GET', 'POST'])
+def access(team_name = ""):
+    if request.method == 'GET':
+        besteam = db2dict(read_db(team_name))
+        players = [player.split(',')[0] for player in besteam]
+        return render_template('access.html', TEAM_NAME = team_name, TEAM = players)
+    else:
+        user = str((request.form['user'])).upper()
+        if user == "":
+            render_template('add.html', TEAM_NAME = team_name, ERROR =  0) 
+            return redirect(url_for('add', team_name = team_name))
         else:
-            f1 = open(save_path, "w")
-            f1.close()
-            return redirect(url_for('access', db_name= db_name))   
+            return redirect(url_for('view', team_name = team_name, user = user))
 
 @app.route('/join', methods=['GET', 'POST'])
 def join():
     if request.method == 'GET':
         return render_template('join.html', ERROR = 0) 
     else:
-        db_name = str(request.form['team']).upper()
-        if Path(os.path.join("db", db_name + ".dat")).is_file(): 
-            return redirect(url_for('access', db_name = db_name))
-        else:
-            return render_template('join.html', ERROR = 1)
-
-@app.route('/team/<db_name>', methods=['GET', 'POST'])
-def access(db_name = ""):
-    if request.method == 'GET':
-        besteam = db2dict(read_db(db_name))
-        team = [player.split(',')[0] for player in besteam]
-        return render_template('access.html', TEAM_NAME = db_name, TEAM = team)
-    else:
-        user = str((request.form['user'])).upper()
-        if user == "":
-            render_template('add.html', TEAM_NAME = db_name, ERROR =  0) 
-            return redirect(url_for('add', db_name = db_name))
-            
-        else:
-            return redirect(url_for('view', db_name = db_name, user = user))
-
-
-@app.route('/team/<db_name>/view', methods=['GET'])
-def view(db_name = ""):
-    user = str(request.args.get('user')).upper()
-    team = [player.split(',')[0] for player in db2dict(read_db(db_name))]
-    return render_template('team.html', TEAM_NAME = db_name, TEAM = team, USER = user)
-
-@app.route('/team/<db_name>/add', methods=['GET', 'POST'])
-def add(db_name = ""):
-    if request.method == 'GET':
-        return render_template('add.html', TEAM_NAME = db_name, ERROR =  0) 
-    else:
-        player = str(request.form['new_player']).upper()
-        # Populate team
-        besteam = db2dict(read_db(db_name))       
-        # Check if player exists
-        if player != "" or player.isalnum() == False:     
-            if not player in besteam:
-                besteam[player]= {'rating': 0, 'votes': 0, 'voted': []}
-                error = 0
+        error = 0
+        conn = None
+        team_name = str(request.form['team']).upper()
+        try:
+            conn = sql.connect(DB_FILE)
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM teams WHERE name = ?", (team_name, )) 
+            if cur.fetchone() == None: error = 1
+        except sql.Error as e:
+            logging.error(e)
+        finally:
+            if conn: conn.close() 
+            if error:
+                return render_template('join.html', ERROR = error)
             else:
-                error = 1
-        else:
-            error = 2
-        # Overwrite data into DB
-        if error == 0: 
-            write_db(db_name, besteam) 
-            return redirect(url_for('view', db_name = db_name, user =  player))
-        else:
-            return render_template('add.html', TEAM_NAME = db_name, ERROR =  error) 
+                return redirect(url_for('access', team_name = team_name))
 
-@app.route('/vote/<db_name>/<user>', methods = ['GET', 'POST'])
-def vote(db_name = "", user = ""):
-    # Get and create dictionary
-    besteam = db2dict(read_db(db_name))
+@app.route('/team/<team_name>/view', methods=['GET'])
+def view(team_name = ""):
+    user = str(request.args.get('user')).upper()
+    team = [player for player in db2dict(read_db(team_name))]
+    return render_template('team.html', TEAM_NAME = team_name, TEAM = team, USER = user)
+
+@app.route('/team/<team_name>/add', methods=['GET', 'POST'])
+def add(team_name = ""):
     if request.method == 'GET':
-        # Populate not voted people
-        team = []
-        for player in besteam:
-            if player != user and not player in besteam[user]['voted']:
-                team.append(player)
-        if team == []:
-            return render_template('team.html', TEAM_NAME = db_name, TEAM = besteam, USER = user, VOTED = 1)
+        return render_template('add.html', TEAM_NAME = team_name, ERROR =  0) 
+    else:
+        player = str(request.form['new_player']).upper()     
+        error = add_player(team_name, player)
+        if error == 0: 
+            return redirect(url_for('view', team_name = team_name, user =  player))
         else:
-            return render_template('vote.html', TEAM_NAME = db_name, USER = user, TEAM =  team) 
+            return render_template('add.html', TEAM_NAME = team_name, ERROR =  error) 
+
+# @app.route('/vote/<team_name>/<user>', methods = ['GET', 'POST'])
+# def vote(team_name = "", user = ""):
+#     # Get and create dictionary
+#     besteam = db2dict(read_db(team_name))
+#     if request.method == 'GET':
+#         # Populate not voted people
+#         team = []
+#         for player in besteam:
+#             if player != user and not player in besteam[user]['voted']:
+#                 team.append(player)
+#         if team == []:
+#             return render_template('team.html', TEAM_NAME = team_name, TEAM = besteam, USER = user, VOTED = 1)
+#         else:
+#             return render_template('vote.html', TEAM_NAME = team_name, USER = user, TEAM =  team) 
+#     else:
+#         # Vote all team members 
+#         for player in besteam:
+#             if player != user and not player in besteam[user]['voted']:
+#                 besteam[player]['votes'] += 1
+#                 besteam[player]['rating'] += float(request.form[player])
+#                 besteam[user]['voted'].append(player) 
+#         # Overwrite data into DB
+#         write_db(team_name, besteam)   
+#         return render_template('team.html', TEAM_NAME = team_name, TEAM = besteam, USER = user, VOTED = 0)
+
+@app.route('/vote/<team_name>/<user>', methods = ['GET', 'POST'])
+def vote(team_name = "", user = ""):
+    if request.method == 'GET':
+        conn = None
+        try:
+            conn = sql.connect(DB_FILE)
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM teams WHERE name = ?;", (team_name, )) 
+            team_id = cur.fetchone()[0]
+            if team_id != None:
+                cur.execute("SELECT name, voted FROM players WHERE team_id = ?;", (team_id,))
+                rows = cur.fetchall() 
+        except sql.Error as e:
+            logging.error(e)
+        finally:        
+            if conn: conn.close() 
+            team = [player for player in db2dict(read_db(team_name))]
+            # Populate not voted people
+            if any(user in row[1] for row in rows if row[1] != None):
+                return render_template('team.html', TEAM_NAME = team_name, TEAM = team, USER = user, VOTED = 1)
+            else:
+                return render_template('vote.html', TEAM_NAME = team_name, USER = user, TEAM =  team)
     else:
         # Vote all team members 
         for player in besteam:
@@ -153,22 +290,22 @@ def vote(db_name = "", user = ""):
                 besteam[player]['rating'] += float(request.form[player])
                 besteam[user]['voted'].append(player) 
         # Overwrite data into DB
-        write_db(db_name, besteam)   
-        return render_template('team.html', TEAM_NAME = db_name, TEAM = besteam, USER = user, VOTED = 0)
+        write_db(team_name, besteam)   
+        return render_template('team.html', TEAM_NAME = team_name, TEAM = besteam, USER = user, VOTED = 0)
+ 
 
-
-@app.route('/match/<db_name>/<user>', methods = ['GET', 'POST'])
-def match(db_name = "", user = ""):
+@app.route('/match/<team_name>/<user>', methods = ['GET', 'POST'])
+def match(team_name = "", user = ""):
     # Get and create dictionary
-    besteam = db2dict(read_db(db_name))    
+    besteam = db2dict(read_db(team_name))    
     if request.method == 'GET':
-        return render_template('match.html', TEAM_NAME = db_name, USER = user, TEAM =  besteam) 
+        return render_template('match.html', TEAM_NAME = team_name, USER = user, TEAM =  besteam) 
     else:
         team = [player for player in besteam if player in request.form.keys()]
         # Check if number of players is even
         nplayers = len(team)
         if nplayers % 2:
-            return render_template('match.html', TEAM_NAME = db_name, USER = user, TEAM =  besteam, ERROR = 1) 
+            return render_template('match.html', TEAM_NAME = team_name, USER = user, TEAM =  besteam, ERROR = 1) 
         else:
             # Repeat the algorithm N times times to increase accuracy
             n = 10
@@ -202,8 +339,9 @@ def match(db_name = "", user = ""):
                     besteam_a_avg = np.around(np.mean(team_a_avg), decimals = 1)
                     besteam_b_avg = np.around(np.mean(team_b_avg), decimals = 1)
                 if nit == n: repeat = False
-            return render_template('match.html', TEAM_NAME = db_name, USER = user, TEAM =  besteam, TEAM_A = besteam_a, TEAM_A_AVG = besteam_a_avg, TEAM_B = besteam_b, TEAM_B_AVG = besteam_b_avg) 
+            return render_template('match.html', TEAM_NAME = team_name, USER = user, TEAM =  besteam, TEAM_A = besteam_a, TEAM_A_AVG = besteam_a_avg, TEAM_B = besteam_b, TEAM_B_AVG = besteam_b_avg) 
 
 
 if __name__ == "__main__":
+    create_connection()
     app.run()
