@@ -11,7 +11,7 @@ app = Flask(__name__)
 app.debug = False
 
 # DATABASE SECTION
-DB_FILE = 'besteam_database.db'
+DB_FILE = 'data.db'
 
 # LOGGER SECTION
 logging.basicConfig(

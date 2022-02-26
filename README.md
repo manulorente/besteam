@@ -2,24 +2,28 @@
 Create random and balanced teams.  
 ***  
 
-## DEVELOPMENT ENVIRONMENT SETUP
+## DEPLOYMENT
+To copy all files from app folder to server:  
+```$ scp -r app mlorente@bonanza.dreamhost.com:/home/mlorente/besteam.dreamhosters.com/``` 
+
+To apply all changes:  
+```$ ssh mlorente@bonanza.dreamhost.com 'cd besteam.dreamhosters.com; rm -rf tmp; mkdir tmp; touch tmp/restart.txt;'```  
+
+## DEVELOPMENT
 #### UBUNTU
 ```
+$ pip install --upgrade pip
 $ python -m venv .venv
 $ source .venv/bin/activate
-$ pip install --upgrade pip
 $ pip install -r app/requirements.txt
 ```
 #### WINDOWS
 ```
+$ python -m pip install --upgrade pip
 $ python -m venv .venv
 $ .venv\Scripts\activate.bat
-$ python -m pip install --upgrade pip
 $ pip install -r app/requirements.txt
 ```
-
-To copy all files from main folder to server:  
-`scp -r * mlorente@bonanza.dreamhost.com:/home/mlorente/besteam.dreamhosters.com/` 
 
 #### REPOSITORY
 Clone repository to a local folder.      
@@ -32,8 +36,7 @@ Save the changes done in the files.
 ```$ git commit -m "Your message" ``` 
 
 Send committed changes to a remote repository, where the local branch is named master to the remote named origin   
-```$ git push -u origin main```   
-
+```$ git push -u origin main```    
 
 ## Setting up flask on DreamHost for web app deployment
 Step by step guidance for setting up the flask on DreamHost for web app deployment.
