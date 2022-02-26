@@ -1,12 +1,10 @@
 
-from distutils.log import error
 import os
 import random
 import datetime
 import logging
 import numpy as np
 import sqlite3 as sql
-from pathlib import Path
 from flask import Flask, render_template, request, redirect, url_for
 
 # APP SECTION
@@ -44,29 +42,13 @@ def create_connection(db_file = DB_FILE):
                                             voted TEXT,
                                             FOREIGN KEY(team_id) REFERENCES teams(id)
                                             );"""                                            
-        create_table(conn, sql_create_teams_table)   
-        create_table(conn, sql_create_players_table)                                                                                             
+        conn.execute(sql_create_teams_table)   
+        conn.execute(sql_create_players_table)                                                                                             
     except sql.Error as e:
         logging.error(e)
     finally:
         if conn:
             conn.close()
-
-def create_table(conn, create_table_sql):
-    try:
-        c = conn.cursor()
-        c.execute(create_table_sql)
-    except sql.Error as e:
-        print(e)    
-
-def create_team(conn, team):
-    now = datetime.datetime.utcnow()
-    now.strftime('%m/%d/%Y %H:%M:%S')
-    cur = conn.cursor()
-    cur.execute("INSERT INTO teams(name, created_by, modified_by) VALUES(?, ?, ?);", 
-                (team, now, now))
-    conn.commit()
-    return cur.lastrowid
 
 def read_db(team_name = ""):
     conn = None
@@ -119,23 +101,10 @@ def add_player(team_name = "", player = ""):
 def db2dict(players = {}):
     team = {}
     for player in players:
-        _, _, name, rating, votes, *voted = player
-        team[name] = {'rating': float(rating), 'votes': int(votes), 'voted': list(voted)}
+        id, _, name, rating, votes, voted = player
+        if voted ==  None: voted=[]
+        team[name] = {'id': int(id), 'rating': float(rating), 'votes': int(votes), 'voted': list(voted)}
     return team
-
-def write_db(team_name = "", besteam = ""):
-    save_path = os.path.join("db", str(team_name).upper() + ".dat")
-    f1 = open(save_path, "w")
-    for player in besteam:
-        f1.write(player+","+str(besteam[player]['rating'])) 
-        f1.write(","+str(besteam[player]['votes']))
-        if besteam[player]['voted'] != []: 
-            f1.write(',')
-            print(*besteam[player]['voted'], sep = ",", file = f1)
-        else:
-            f1.write('\n')
-    f1.close()    
-    return True
 
 @app.route('/')
 @app.route('/index')
@@ -176,7 +145,12 @@ def create():
                     conn.close() 
                     return render_template('create.html', ERROR = 1)
                 else:
-                    create_team(conn, team_name)   
+                    now = datetime.datetime.utcnow()
+                    now.strftime('%m/%d/%Y %H:%M:%S')
+                    cur = conn.cursor()
+                    cur.execute("INSERT INTO teams(name, created_by, modified_by) VALUES(?, ?, ?);", 
+                                (team_name, now, now))
+                    conn.commit() 
                     conn.close() 
                     return redirect(url_for('access', team_name= team_name))
 
@@ -235,63 +209,47 @@ def add(team_name = ""):
         else:
             return render_template('add.html', TEAM_NAME = team_name, ERROR =  error) 
 
-# @app.route('/vote/<team_name>/<user>', methods = ['GET', 'POST'])
-# def vote(team_name = "", user = ""):
-#     # Get and create dictionary
-#     besteam = db2dict(read_db(team_name))
-#     if request.method == 'GET':
-#         # Populate not voted people
-#         team = []
-#         for player in besteam:
-#             if player != user and not player in besteam[user]['voted']:
-#                 team.append(player)
-#         if team == []:
-#             return render_template('team.html', TEAM_NAME = team_name, TEAM = besteam, USER = user, VOTED = 1)
-#         else:
-#             return render_template('vote.html', TEAM_NAME = team_name, USER = user, TEAM =  team) 
-#     else:
-#         # Vote all team members 
-#         for player in besteam:
-#             if player != user and not player in besteam[user]['voted']:
-#                 besteam[player]['votes'] += 1
-#                 besteam[player]['rating'] += float(request.form[player])
-#                 besteam[user]['voted'].append(player) 
-#         # Overwrite data into DB
-#         write_db(team_name, besteam)   
-#         return render_template('team.html', TEAM_NAME = team_name, TEAM = besteam, USER = user, VOTED = 0)
-
 @app.route('/vote/<team_name>/<user>', methods = ['GET', 'POST'])
 def vote(team_name = "", user = ""):
-    if request.method == 'GET':
-        conn = None
-        try:
-            conn = sql.connect(DB_FILE)
-            cur = conn.cursor()
-            cur.execute("SELECT * FROM teams WHERE name = ?;", (team_name, )) 
-            team_id = cur.fetchone()[0]
-            if team_id != None:
-                cur.execute("SELECT name, voted FROM players WHERE team_id = ?;", (team_id,))
-                rows = cur.fetchall() 
-        except sql.Error as e:
-            logging.error(e)
-        finally:        
-            if conn: conn.close() 
-            team = [player for player in db2dict(read_db(team_name))]
+    conn = None
+    try:
+        conn = sql.connect(DB_FILE)
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM teams WHERE name = ?;", (team_name, )) 
+        team_id = cur.fetchone()[0]
+        if team_id != None:
+            cur.execute("SELECT * FROM players WHERE team_id = ?;", (team_id,))
+            rows = cur.fetchall() 
+    except sql.Error as e:
+        logging.error(e)
+    finally:
+        team = db2dict(rows)        
+        if request.method == 'GET':
             # Populate not voted people
-            if any(user in row[1] for row in rows if row[1] != None):
+            if conn: conn.close() 
+            if len(team) == 1:
                 return render_template('team.html', TEAM_NAME = team_name, TEAM = team, USER = user, VOTED = 1)
+            elif any(player in team[user]['voted'] for player in team if team[player]['voted'] != []):
+                return render_template('team.html', TEAM_NAME = team_name, TEAM = team, USER = user, VOTED = 2)
             else:
+                team.pop(user) # Remove user from players to vote
                 return render_template('vote.html', TEAM_NAME = team_name, USER = user, TEAM =  team)
-    else:
-        # Vote all team members 
-        for player in besteam:
-            if player != user and not player in besteam[user]['voted']:
-                besteam[player]['votes'] += 1
-                besteam[player]['rating'] += float(request.form[player])
-                besteam[user]['voted'].append(player) 
-        # Overwrite data into DB
-        write_db(team_name, besteam)   
-        return render_template('team.html', TEAM_NAME = team_name, TEAM = besteam, USER = user, VOTED = 0)
+        else:
+            # Vote all team members and store data into de database
+            for player in team:
+                if player != user and not player in team[user]['voted']:
+                    team[player]['votes'] += 1
+                    team[player]['rating'] += float(request.form[player])
+                    team[user]['voted'].append(player) 
+                    cur.execute("UPDATE players SET votes=?, rating=? WHERE id=?;", 
+                    (team[player]['votes'], team[player]['rating'], team[player]['id'],))
+            # TODO How to write list of voted players by user to the db
+            cur.execute("UPDATE players SET voted=? WHERE id=?;", 
+            (','.join(team[user]['voted']), team[user]['id'],))
+            if conn:
+                conn.commit()
+                conn.close() 
+            return render_template('team.html', TEAM_NAME = team_name, TEAM = team, USER = user, VOTED = 0)
  
 
 @app.route('/match/<team_name>/<user>', methods = ['GET', 'POST'])

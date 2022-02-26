@@ -68,6 +68,10 @@
         </div>
         {% if VOTED == 1 %}
         <div class="form_error">
+          <p>No hay jugadores para votar</p>
+        </div>        
+        {% elif VOTED == 2 %}
+        <div class="form_error">
           <p>Ya has votado a todo el equipo</p>
         </div>
         {% elif VOTED == 0 %}
