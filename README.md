@@ -18,8 +18,22 @@ $ python -m pip install --upgrade pip
 $ pip install -r app/requirements.txt
 ```
 
-To copy all files from current dev folder to server:  
+To copy all files from main folder to server:  
 `scp -r * mlorente@bonanza.dreamhost.com:/home/mlorente/besteam.dreamhosters.com/` 
+
+#### REPOSITORY
+Clone repository to a local folder.      
+```$ git clone https://github.com/manulorente/besteam.git``` 
+
+Add all files new files, changes and removed files.   
+```$ git add -A``` 
+
+Save the changes done in the files.   
+```$ git commit -m "Your message" ``` 
+
+Send committed changes to a remote repository, where the local branch is named master to the remote named origin   
+```$ git push -u origin master```   
+
 
 ## Setting up flask on DreamHost for web app deployment
 Step by step guidance for setting up the flask on DreamHost for web app deployment.

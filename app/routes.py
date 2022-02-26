@@ -1,5 +1,4 @@
 
-import os
 import random
 import datetime
 import logging
@@ -12,12 +11,12 @@ app = Flask(__name__)
 app.debug = False
 
 # DATABASE SECTION
-DB_FILE = 'db\\besteam_database.db'
+DB_FILE = 'besteam_database.db'
 
 # LOGGER SECTION
 logging.basicConfig(
-    filename = 'log\\debug.log',
-    filemode = "a",
+    filename = 'debug.log',
+    filemode = "w+",
     level = logging.INFO,
     format = "[%(asctime)s] %(levelname)-8s %(funcName)-20s %(message)s",
     datefmt = "%m/%d/%Y %H:%M:%S",
@@ -102,8 +101,10 @@ def db2dict(players = {}):
     team = {}
     for player in players:
         id, _, name, rating, votes, voted = player
-        if voted ==  None: voted=[]
-        team[name] = {'id': int(id), 'rating': float(rating), 'votes': int(votes), 'voted': list(voted)}
+        if voted ==  None: 
+            team[name] = {'id': int(id), 'rating': float(rating), 'votes': int(votes), 'voted': []}
+        else:
+            team[name] = {'id': int(id), 'rating': float(rating), 'votes': int(votes), 'voted': voted.split(',')}
     return team
 
 @app.route('/')
@@ -225,14 +226,15 @@ def vote(team_name = "", user = ""):
     finally:
         team = db2dict(rows)        
         if request.method == 'GET':
-            # Populate not voted people
+            # Check if user already voted and populate not voted people
+            no_voted = [player in team[user]['voted'] for player in team if team[user]['voted'] != [] and player != user]
             if conn: conn.close() 
-            if len(team) == 1:
+            if no_voted == []:
                 return render_template('team.html', TEAM_NAME = team_name, TEAM = team, USER = user, VOTED = 1)
-            elif any(player in team[user]['voted'] for player in team if team[player]['voted'] != []):
+            elif no_voted != [] and all(no_voted):
                 return render_template('team.html', TEAM_NAME = team_name, TEAM = team, USER = user, VOTED = 2)
             else:
-                team.pop(user) # Remove user from players to vote
+                team = [player for player in team if not player in team[user]['voted'] and player != user]
                 return render_template('vote.html', TEAM_NAME = team_name, USER = user, TEAM =  team)
         else:
             # Vote all team members and store data into de database
@@ -243,9 +245,7 @@ def vote(team_name = "", user = ""):
                     team[user]['voted'].append(player) 
                     cur.execute("UPDATE players SET votes=?, rating=? WHERE id=?;", 
                     (team[player]['votes'], team[player]['rating'], team[player]['id'],))
-            # TODO How to write list of voted players by user to the db
-            cur.execute("UPDATE players SET voted=? WHERE id=?;", 
-            (','.join(team[user]['voted']), team[user]['id'],))
+            cur.execute("UPDATE players SET voted=? WHERE id=?;", (','.join(team[user]['voted']), team[user]['id'],))
             if conn:
                 conn.commit()
                 conn.close() 
@@ -255,15 +255,15 @@ def vote(team_name = "", user = ""):
 @app.route('/match/<team_name>/<user>', methods = ['GET', 'POST'])
 def match(team_name = "", user = ""):
     # Get and create dictionary
-    besteam = db2dict(read_db(team_name))    
+    players = db2dict(read_db(team_name))    
     if request.method == 'GET':
-        return render_template('match.html', TEAM_NAME = team_name, USER = user, TEAM =  besteam) 
+        return render_template('match.html', TEAM_NAME = team_name, USER = user, TEAM =  players) 
     else:
-        team = [player for player in besteam if player in request.form.keys()]
+        squad = [player for player in players if player in request.form.keys()]
         # Check if number of players is even
-        nplayers = len(team)
+        nplayers = len(squad)
         if nplayers % 2:
-            return render_template('match.html', TEAM_NAME = team_name, USER = user, TEAM =  besteam, ERROR = 1) 
+            return render_template('match.html', TEAM_NAME = team_name, USER = user, TEAM =  players, ERROR = 1) 
         else:
             # Repeat the algorithm N times times to increase accuracy
             n = 10
@@ -281,15 +281,21 @@ def match(team_name = "", user = ""):
                 team_a_avg = [] 
                 team_b_avg = []  
                 for i in index:
-                    player_rating = besteam[list(besteam)[i]]['rating']/besteam[list(besteam)[i]]['votes']
-                    if (np.mean(team_a_avg) < np.mean(team_b_avg) and len(team_a) < int(nplayers/2)) or team_a_avg == []:
-                        team_a.append(list(besteam)[i])
+                    player_rating = players[list(squad)[i]]['rating']/players[list(squad)[i]]['votes']
+                    if team_a_avg == []:
+                        team_a.append(list(squad)[i])
+                        team_a_avg.append(player_rating)
+                    elif team_b_avg == []:
+                        team_b.append(list(squad)[i])
+                        team_b_avg.append(player_rating)                        
+                    elif (np.mean(team_a_avg) < np.mean(team_b_avg) and len(team_a) < int(nplayers/2)):
+                        team_a.append(list(squad)[i])
                         team_a_avg.append(player_rating)
                     elif len(team_b) < int(nplayers/2):
-                        team_b.append(list(besteam)[i])
-                        team_b_avg.append(np.around(player_rating)) 
+                        team_b.append(list(squad)[i])
+                        team_b_avg.append(player_rating)
                     else:
-                        team_a.append(list(besteam)[i])
+                        team_a.append(list(squad)[i])
                         team_a_avg.append(player_rating)  
                 if abs(np.mean(team_a_avg) - np.mean(team_b_avg)) <= abs(besteam_a_avg - besteam_b_avg) or nit == 1:
                     besteam_a = zip(team_a, np.around(team_a_avg, decimals = 1))  
@@ -297,7 +303,7 @@ def match(team_name = "", user = ""):
                     besteam_a_avg = np.around(np.mean(team_a_avg), decimals = 1)
                     besteam_b_avg = np.around(np.mean(team_b_avg), decimals = 1)
                 if nit == n: repeat = False
-            return render_template('match.html', TEAM_NAME = team_name, USER = user, TEAM =  besteam, TEAM_A = besteam_a, TEAM_A_AVG = besteam_a_avg, TEAM_B = besteam_b, TEAM_B_AVG = besteam_b_avg) 
+            return render_template('match.html', TEAM_NAME = team_name, USER = user, TEAM =  players, TEAM_A = besteam_a, TEAM_A_AVG = besteam_a_avg, TEAM_B = besteam_b, TEAM_B_AVG = besteam_b_avg) 
 
 
 if __name__ == "__main__":
