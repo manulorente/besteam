@@ -32,7 +32,7 @@ Save the changes done in the files.
 ```$ git commit -m "Your message" ``` 
 
 Send committed changes to a remote repository, where the local branch is named master to the remote named origin   
-```$ git push -u origin master```   
+```$ git push -u origin main```   
 
 
 ## Setting up flask on DreamHost for web app deployment
